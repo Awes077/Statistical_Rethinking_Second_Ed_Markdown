@@ -1,0 +1,360 @@
+---
+title: "Chapter_5"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Chapter 5: Multiple Regression
+
+Note right off the bat I've changed the chapter title here from Multivariate models to Multiple Regression. Just want to make a little clarifying note there that Multivariate models are really models that have multiple response variables and thus involve estimating/predicting parameters of a multivariate distribution - like a vector of means for a multivariate Gaussian. A multiple regression, which is what McElreath is really dealing with here, has multiple predictors but a single response variable. Anyways.
+
+We start off with a discussion of the Waffle House divorce rate correlation. This leads to an introduction to **Confounds**, which McElreath broadly defines as a variable that is correlated to a variable of interest. These can be spurious (and thus mask a meaningful relationsip), as in the case of the Waffle House-divorce relationship, but they can also be meaningful, like in Simpson's paradox. In Simpson's paradox, controlling for a confound actually reverses the relationship between a response variable and a meaningful predictor. There's a great dataset using penguins which I'll show below:
+
+
+
+```{r cars}
+#install.packages('palmerpenguins')
+library(palmerpenguins)
+library(tidyverse)
+library(dplyr)
+peng_df <- palmerpenguins::penguins%>%na.omit()
+str(peng_df)
+head(peng_df)
+
+#First we plot it our data as if all penguins were one population - so not controlling for species.
+
+mod_simpsons <- lm(bill_depth_mm~bill_length_mm, data=peng_df)
+
+summary(mod_simpsons)
+
+
+peng_df%>%
+  ggplot(aes(x=bill_length_mm, y=bill_depth_mm))+
+  geom_point()+
+  geom_abline(slope=mod_simpsons$coefficients[[2]], 
+              intercept = mod_simpsons$coefficients[[1]],
+              color='red')+
+  labs(x='Length', y='Depth')+ theme_classic()
+
+
+
+
+
+```
+
+Above we have a plot of bill depth as a function of bill length. We can see that it is a strongly negative relationship. Now though, we will control for our confound, species. This is where we see Simpson's Paradox come into play and we see that confounds can in fact contain meaningful information!
+
+```{r species_lvl, echo=FALSE}
+#first we just create three different data sets
+
+chin <- peng_df %>% filter(species=='Chinstrap')
+adelie <- peng_df %>% filter(species=="Adelie")
+gentoo <- peng_df %>% filter(species=="Gentoo")
+
+lm_chin <- lm(data=chin, bill_depth_mm~bill_length_mm)
+lm_adelie <- lm(data=adelie, bill_depth_mm~bill_length_mm)
+lm_gentoo <- lm(data=gentoo, bill_depth_mm~bill_length_mm)
+
+
+peng_df%>%
+  ggplot(aes(x=bill_length_mm, y=bill_depth_mm, color=species))+
+  geom_point()+
+  geom_abline(slope=lm_chin$coefficients[[2]], 
+              intercept = lm_chin$coefficients[[1]],
+              color='red')+  
+  geom_abline(slope=lm_adelie$coefficients[[2]], 
+              intercept = lm_adelie$coefficients[[1]],
+              color='red')+  
+  geom_abline(slope=lm_gentoo$coefficients[[2]], 
+              intercept = lm_gentoo$coefficients[[1]],
+              color='red')+
+  labs(x='Length', y='Depth')+ theme_classic()
+
+```
+
+
+
+
+Now we see that when we stratify the linear relationship based on species, we have literally the opposite relationship - each species has a positive relationship between bill length and depth. Thus the relationship between bill length and depth has a confound, species, which will change the nature of the relationship. This has real meaning in the system as well, in that species do differ in their body sizes and thus by not controlling for a sort of morphological generalization, we misrepresent the relationship between the two variables! So confounds are not inherently useless (although I'd also argue that the Waffle House confound has some interesting meaning w/r/t Southerness, but whatever).
+
+
+
+Alright, full disclosure, I just kinda want to futz around with like brms and cmdrstan to get an idea of fitting models. So I'm going to do that with the data above and look at the model we'd get comparing bill depth and bill length if we do and don't condition on species beforehand. So let's dig into some of these.
+```{r non_species_brms, echo=FALSE, results='hide'}
+library(brms)
+
+#gonna skip cmdstanr cuz I think it requires a separate stan file that I don't feel like writing 
+library(cmdstanr)
+
+#Let's look at our data first
+
+str(peng_df)
+
+prior1 <- prior(normal(0,10), class=b)
+
+
+
+mod_total_pooling <- brm(bill_depth_mm~bill_length_mm, data=peng_df, prior=prior1)
+
+
+mod_total_scaled_pool <- brm(scale(bill_depth_mm)~scale(bill_length_mm), data=peng_df, prior=prior1)
+
+
+
+posterior_pred_pool <- posterior_predict(mod_total_pooling, ndraws = 100)
+
+mean_post_pool <- posterior_epred(mod_total_pooling, ndraws=100)
+
+
+post_means_no_spp <- apply(mean_post_pool, 2, mean)
+post_sd_no_spp <- apply(mean_post_pool, 2, sd)
+
+
+
+g_ns <- ggplot(data=peng_df, aes(x=bill_length_mm, y=bill_depth_mm))+geom_point()+
+  geom_point(aes(y=posterior_pred_pool[1,], alpha=0.2), shape=1)+
+  geom_line(aes(y=post_means_no_spp, alpha=0.2))+
+  geom_ribbon(aes(ymin=post_means_no_spp-post_sd_no_spp, ymax=post_means_no_spp+post_sd_no_spp, alpha=0.2))
+
+g_ns
+
+
+
+
+
+```
+
+First we'll take a look at two possible Bayesian models using the same relationship as above, now fitted in brms. The two flavors in this section are non-scaled data and scaled data. The first model has data on the original scale while the second model uses the same data but centered and scaled by the standard deviation. Note here that since we are not pooling at the species level, I have not scaled at the species level either. So scaling is relative to the total mean for the data frame rather than to species level means. We'll explore the impact that has in the next chunk of code.
+
+```{r non_species_plots, echo=FALSE}
+
+summary(mod_total_pooling, waic=T)
+plot(mod_total_pooling)
+summary(mod_total_scaled_pool, waic=T)
+
+
+
+plot(mod_total_scaled_pool)
+
+var(peng_df$bill_length_mm)
+var(peng_df$bill_depth_mm)
+
+
+
+
+
+
+
+
+```
+
+We can see above that the scaling has pretty substantially changed our results. First our intercept is 0 in the scaled data, with a bit of density distributed between 0.1 and -0.1. Second our slope estimate goes from -0.08 to -0.23. This is likely because of the difference in scale between two variables. To see for yourself you can check out the variance of each metric using base R's var function. Var(length) is about 29.9 mm while var(depth) is only about 3.8. Since one metric has a wider range of values than the other, the coefficient value (the per unit change in y for a unit change in x) will shrink. By scaling so data are relative to both the mean and the standard deviation, we can capture a bit more of the direction and magnitude of the relationship between the two variables. Also worth noting that the -0.08 slope is more or less equivalent to the result from lm above. If we scaled a re-ran the non-bayesian model I imagine we'd get a similar chnage in coefficient estimate.
+
+Now let's try grouping and scaling by species:
+```{r brms_species, echo=FALSE, results='hide'}
+
+mod_spp_pool <- brm(bill_depth_mm~1+bill_length_mm+(1+bill_length_mm|species), data=peng_df, prior=c(set_prior("normal(0,10)", class="b")),
+                    backend = "cmdstanr", control=list(adapt_delta=0.99, max_treedepth=20))
+
+prior_summary(mod_spp_pool)
+
+#getting 16 divergent transitions but honestly the overall posterior seems okay? Let's check summary here before we get into plotting in the next chunk.
+
+summary(mod_spp_pool)
+pairs(mod_spp_pool)
+
+plot(mod_spp_pool)
+
+
+posterior_pred_pool <- posterior_predict(mod_spp_pool, ndraws = 100)
+
+mean_post_pool <- posterior_epred(mod_spp_pool, ndraws=100)
+
+
+post_means_ns <- apply(mean_post_pool, 2, mean)
+post_sd_ns <- apply(mean_post_pool, 2, sd)
+
+
+
+g_ns <- ggplot(data=peng_df, aes(x=bill_length_mm, y=bill_depth_mm, color=species))+geom_point()+
+  geom_point(aes(y=posterior_pred_pool[1,], alpha=0.2), shape=1)+
+  geom_line(aes(y=post_means_ns, alpha=0.2))+
+  geom_ribbon(aes(ymin=post_means_ns-post_sd_ns, ymax=post_means_ns+post_sd_ns, alpha=0.2))
+
+g_ns
+
+
+
+
+
+
+
+
+scaled_peng_df <- peng_df %>%
+                        group_by(species)%>%
+                          mutate(bill_length_sc = scale(bill_length_mm),
+                                 bill_depth_sc = scale(bill_depth_mm))
+
+
+mod_scale_spp <- brm(bill_depth_sc ~ 1 + bill_length_sc +(1+bill_length_sc|species), data=scaled_peng_df, prior=c(set_prior("normal(0,10", class="b"),
+                                                                                                   set_prior("cauchy(0,2)", class="sd")),
+                     control= list(adapt_delta=0.99),backend="cmdstanr")
+
+pairs(mod_scale_spp)
+summary(mod_scale_spp)
+plot(mod_scale_spp)
+
+prior_summary(mod_scale_spp)
+
+
+post_p_check <- pp_check(mod_scale_spp, ndraws=100)
+
+
+#okay so this gave me 100 posterior draws for each of my 333 data points. That makes some sense now. okay. Cool. So how to intuitively rep that. Easy thing would be to avg over each row and plot? But I feel like I lose the group level stuff? Man like Mcelreath's rethinking package really does all the damn work for you. Okay. So if I ggplot my x and y, then plot each row over it? That should work. Let's give it a try.
+
+
+
+
+posterior_pred_data <- posterior_predict(mod_scale_spp, ndraws = 100)
+
+mean_post_pred <- posterior_epred(mod_scale_spp, ndraws=100)
+
+
+post_means <- apply(mean_post_pred, 2, mean)
+post_sd <- apply(mean_post_pred, 2, sd)
+
+
+
+g_test <- ggplot(data=scaled_peng_df, aes(x=bill_length_sc, y=bill_depth_sc, color=species))+geom_point()+
+  geom_point(aes(y=posterior_pred_data[1,], alpha=0.2), shape=1)+
+  geom_line(aes(y=post_means, alpha=0.2))+
+  geom_ribbon(aes(ymin=post_means-post_sd, ymax=post_means+post_sd, alpha=0.2))+facet_wrap(~species)
+
+g_test
+
+
+
+
+post_p_check
+
+```
+
+
+---
+
+##### Rethinking: Causal Inference
+
+Basically, here McElreath just points out that there isn't actually a good consistent set of best practices for causal inference in the sciences or in statistics. It is always a sort of gray area built around unverifiable assumptions and experimental control. In complex dynamical systems, causality may not even have real meaning in that everything can drive change in everything else! So it's always good to keep that in mind when we talk about relating mechanistic or causal hypotheses to statistical models like these.
+
+-----
+
+
+
+### 5.3 - When adding variables hurts
+
+Lets just jump straight into multicollinearity yeah?
+
+Looking at what happens when we try and predict height using the length of both legs rather than just one.
+```{r}
+
+library(rethinking)
+N <- 100
+heights <- rnorm(N, 10, 2)
+leg_prop <- runif(N, 0.4, 0.5)
+leg_left <- heights*leg_prop+rnorm(N,0,0.02)
+leg_right <- heights*leg_prop+rnorm(N,0,0.02)
+
+d <- data.frame(heights, leg_left, leg_right)
+
+
+m5.8 <- rethinking::map(alist(
+  heights ~ dnorm(mu, sigma),
+  mu <- a + bl*leg_left+br*leg_right,
+  a~dnorm(10,100),
+  bl~dnorm(2,10),
+  br~dnorm(2, 10),
+  sigma~dunif(0,10)
+),
+data=d)
+
+precis(m5.8)
+
+plot(precis(m5.8))
+```
+
+The main thing to watch here is the mean and standard deviation for bl and br. They are not great - standard devs are massive relative to the parameter estimates. So we have a lot of uncertainty around the effect that each leg has in predicting height.
+
+
+The key question of a multiple regression is: what is the value of knowing this predictor after knowing all the other predictors? So in this case, it would be: what is the value of knowing the value of one leg length after already knowing the other?
+
+The posterior is the answer to this - conditioned on all of the possible permutations of bl and br.
+```{r}
+post <- extract.samples(m5.8)
+
+plot(bl~br, post, col=col.alpha(rangi2, 0.1), pch=16)
+```
+
+
+
+Here we plot the two coefficients against one another and show they are strongly negatively correlated. When bl is large br must by definition be small. 
+
+The tricky part here is how optimization sort of occurs. As McElreath describes it, you can look at our likelihood as this function:
+
+$y_{i}\sim Normal(\mu_{i}, \sigma)$ 
+$\mu_{i} = \alpha + (\beta_{1}+\beta_{2})x_{i}$
+
+The trick here is that we have factored out our $x_{i}$ terms. What this ends up showing us is that neither $\beta$ ever influences $\mu$ on its own. Instead, it is the sum of the two terms. As a result, the posterior shows all of the possible combinations of $\beta_{1}$ and $\beta_{2}$ that could match the strength of the association between leg length and height. So we end up with lots of equivalent parameterizations of the model.
+
+So really we end up with a posterior for the SUM of the two coefficients as the strength of the association:
+
+```{r}
+sum_blbr <- post$bl+post$br
+
+mean(sum_blbr)
+
+dens(sum_blbr, col = rangi2, lwd = 2, xlab = ("sum of bl and br"))
+
+#now fit the model with just one leg to see if the estimate is close to our mean of the sum.
+
+m5.9 <- rethinking::map(alist(
+  heights ~ dnorm(mu, sigma),
+  mu <- a + bl*leg_left,
+  a~dnorm(10,100),
+  bl~dnorm(2,10),
+  sigma~dunif(0,10)
+),
+data=d)
+
+precis(m5.9)
+
+
+```
+
+
+When you run precis, you'll see that our mean for bl is just about the same as the mean for the sum of the two coefficients. So the pairs of coefficients still described the strength of the association, but sort of randomly decomposed into two complementary components - one for the left leg one for the right leg.
+
+
+So basically, multicollinearity may lead to a correct prediction but poor inference about the importance of either leg. This example is a bit silly, so let's try something else from another dataset.
+
+```{r}
+data(milk)
+
+d <- milk
+```
+
+
+```{r}
+dummy_data <- seq(0,10,1)
+
+fit_func <- function(x, theta, gam){
+  fit <- exp(-gam*((x-theta)^2))
+  return(fit)
+}
+
+fit_func(dummy_data, 5, -0.2)
+
+```
+

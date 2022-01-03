@@ -1,0 +1,46 @@
+---
+title: "Chapter_3"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Section 3.2
+
+I'm starting pretty far into the book here since I've already worked through a number of the chapters from the first edition in other markdown docs. So here I am starting with McElreath's discussion of loss functions in Chapter 3, section 3.2, code chunks around 3.11 and onward.
+
+```{r, warning= F, message = F}
+library(rethinking)
+
+#This section creates our initial grid approximation for p, the probability of water, in the globe tossing example. We then get a uniform prior for each of those values. Calculate the likelihood of getting 3 water tosses in 3 throws given our prob_grid. Compute the posterior, standardize, then sample it to mimic an MCMC style output.
+
+p_grid <- seq( from=0 , to=1 , length.out=1000 )
+prior <- rep(1,1000)
+likelihood <- dbinom( 3 , size=3 , prob=p_grid )
+posterior <- likelihood * prior
+posterior <- posterior / sum(posterior)
+samples <- sample( p_grid , size=1e4 , replace=TRUE , prob=posterior )
+
+```
+
+From there McElreath walks through different ways to summarize the posterior via samples. In particular he looks at intervals of a specific density, the highest density intervals, and various point estimates.
+
+```{r}
+#Here we get percentile intervals from the posteriro samples specifyting a probability mass interval of 50%
+PI( samples , prob=0.5 )
+
+#Here we get the highest posterior density interval with a mass of 50%
+HPDI( samples , prob=0.5 )
+
+
+p_grid[ which.max(posterior) ]
+
+chainmode( samples , adj=0.01 )
+```
+
+
+
+
+

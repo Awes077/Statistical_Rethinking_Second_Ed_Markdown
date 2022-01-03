@@ -1,0 +1,645 @@
+---
+title: "Chapter_4"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rethinking)
+```
+
+# Chapter 4 - Why Normal distributions are normal
+
+We start with a coin flip and movement example. Line up 1000 people on the center of a football field, have them flip a coin over and over. For each heads they get they step to the left of the midline, for each tails they step to the right of the midline. While we can't predict how far any given individual will have stepped in either direction, we can 100% predict the distribution of distances across those 1000 people. It will be roughly normally distributed. This is, more or less I think, because of the maximum entropy principle. Most people will on average not move, because there are so many permutations of some number of flips that sum to 0 when we can move one step left or one step right. There are slightly fewer that sum to 1 step left or 1 step right. There are slightly fewer still that sum to 2 steps, and so on. Thus even when the process is binomial, we can summarize its outcomes with a normal distribution.
+
+## 4.1.1 - Normal by Addition
+
+So we simulate the coin flip example using R, 16 steps between 1 and -1, replicated across 1000 of our supposed friends. When we sum the 16 steps and plot those 1000 sums, they are ALWAYS normally distributed. So why?
+
+The core logic has to do with random draws from any distribution. Every draw represents a random deviation from the underlying mean. The more draws we have the more likely it is some of those deviations will cancel each other out. So on average, most sets will almost completely cancel out so that, by definition, on average everyone is near the mean. But some will not and so we see the characteristic bell curve for those sums. Thus addition of results from any underlying distribution (we used the uniform distribution for this) will always be Gaussian.
+
+To carry this further, there are many many ways to cancel out positive or negative deviations. But there are very few ways (ie permutations of our events) that yield large negative or positive sums. Thus we see our inevitable Gaussian. So that brings us back to the max entropy perspective. Our central values make the fewest assumptions about our underlying events that constitute the sums. Large values can only be made by many steps in one direction or a few large steps with few small steps in the opposite. So you can think of it like, there is an equal probability of any given permutation. But permutations can have the same sum. And as we move closer to the center, we have more and more permutations that have the same sum - thus, given they are all equally probable, we would expect certain sums to appear much more frequently. So the normal distribution emerges. Heck yeah.
+
+```{r}
+#setion 4.1.1 - Normal by addition
+
+#simulating the coin toss and step example for explaining the normal distribution.
+
+#16 coin flips, steps between -1 and 1, 1000 people doing it. Always normal.
+pos <- replicate(1000, sum(runif(16, -1,1)))
+
+hist(pos)
+
+
+```
+
+## 4.1.2 - Normal by multiplication
+
+Now we look at multiplicative effects. Frame story is multiple loci affecting a growth rate, and each has a multiplicative effect with the others. When we sample 12 of them from 1 to 1.1 and multiply them, then replicate 10,000 times, we find that our growth rates are normally distributed around 1.8ish? Let's find out why! Cause I genuinely don't know so.
+
+AHH FUCK it's because in this example, the multiplicative elements are quite small. Multiplying numbers with small differences ain't all that different from adding them, and so we could actually substitute a sort of additive approximation. Wonder if this breaks down then if differences, e.g. effects of each multiplicative element are larger, even if still roughly equal?
+
+
+```{r}
+
+#section 4.1.2 - Normal by multiplication
+
+#looking at how multiplicative effects rather than additive effects 
+
+
+#example here is multiplicative effects of genes on growth rate. So we sample 12 growth rates from 1 to 1.1, where 1 
+#indictes no growth and 1.1 indicates a 10% increase. We then multiply these loci together. We replicate 10000 times and
+#plot, and find rates are roughly nomrally distributed.
+growth <- replicate(10000, prod(1+runif(12,0,0.1)))
+dens(growth, norm.comp = T)
+
+
+#now let's test with larger effects.
+
+big <- replicate(10000, prod(1+runif(12, 0,0.5)))
+dens(big, norm.comp = T)
+
+#AHHH so it's not normally distributed now punk! This makes sense though, based on McElreath's explanation. We see that
+#since effects are larger now, multiplying them deviates from an additive process much more strongly. Thus we lose the
+#normally distributed pattern. But I fucking bet if we log transform this shit it's normal again ayyy??
+
+```
+
+## 4.1.3 Normal by log multiplication
+
+Unsurprisingly, while larger effects do not produce Gaussian distributions when just multiplied together, they are normally distributed when multiplied together on a log scale. Collapsing those differences as ever, such that we could represent them as additive processes without too much loss.
+
+```{r}
+log.big <- replicate(10000, log(prod(1+runif(12,0,0.5))))
+dens(log.big, norm.comp = T)
+```
+
+
+## 4.1.4 Justifying Uses of Normal Distribution
+
+We are going to justify using normal distributions as the basis for damn near all models using both ontological and epistemological reasoning. No idea why that's important but hey let's see where he goes with this yeah?
+
+### 4.1.4.1 Ontological Justification
+
+Basically we argue here that we use the Normal distribution becasue it is incredibly common. By adding together deviations or fluctuations, which is what normal distributions do, we shed idiosyncratic information about processes. This means that normality is a solid approximation for many different types of process and can be used widely. All that normality requires is a mean and spread around that mean. So long as a process can be summarized sufficiently with those two components, normality will REIGN SUPREME.
+
+There are of course other consistent patterns that are necessary for other data types - exponential distributions of waiting times, Poisson distributions of frequencies of counts, etc. All of these belong to the exponetial family of distributions and we'll cover them later.
+
+### 4.1.4.2 Epistemological Justification
+
+The normal distribution has the loosest set of assumptions for the underlying process or data. Basically, it represents a specific 'state of ignorance' about our data or its underlying distrbution. If all we are comfortable saying about our data is it's mean and variance (or that it has a mean and finite variance around that mean), then the normal distribution makes no additional assumptions. Thus it is the best reflection we have for our current understanding.
+
+As we learn more about a given system, we may be able to make more justified assumptions and thus to make different choices about distributions. But so long as we have no additional assumptions, the normal distribution is the one that can be realized in the most ways without introducing unjustified constraints or parameters.
+
+As ever, he points out that models are tools or golems. They do not define our assumptions about the system, we define their assumptions about inference. And so we need not be bound by the assumptions of the model in our understanding of the system. But it is good to keep those limitations in mind as we draw further conclusions etc.
+
+
+#### Overthinking - Gaussian distribution
+
+Not going to go into detail about his pdf vs pmf work here, but I will use this as an opportunity to talk a bit about the probability density function for a Gaussian. In particular the pi. e makes a bit more sense, and acts as a base that scales sigma. But pi is weirder. Basically it acts as our normalizing constant that ensures the area under the curve always sums to 1. To understand this, you have to understand the Gaussian integral:
+
+$\int e^{-x^{2}} dx = \sqrt{\pi}$
+
+So basically, we know that the total area under an exponential to the power of -x^2 = sqrt(pi). Thus we can standardize our area in the Gaussian by pi (along with 2 sigma) to guarantee that our pdf sums to 1 across its entire area.
+
+Understanding the Gaussian integral?? that's a whole other thing. Dont know that I can talk through that as it requires understanding of the relationship between e, volume of circles, pi, and I think some multivariate calculus. But hey that's life right? Gotta be limited somewhere.
+
+
+
+## 4.2 A Language for Describing Models
+
+Laying out some basic linguistic conventions for describing models and data.
+
+1. A set of measurements that we want to predict or understand are called 'outcome' variables.
+
+2. For each of these observations, we define a likelihood function that describes the plausibility of individual data points. For linear models, this is always Gaussian.
+
+3. Next we have observations we want to use to predict these outcomes. We call these predictors or predictor variables.
+
+4. We relate the shape of the likelihood model to the predictor variables - its precise location and variance as well as other properties if it has them. Thus we can define all parameters of the likelihood model using our predictors. 
+
+5. Lastly, we choose priors for each of those parameters. These define the initial information on the state of the model.
+
+
+Then we can write the model out in very mathy terms, like:
+
+$outcome_{i} \sim Normal(\mu_{i}, \sigma)$
+
+$\mu_{i} = \beta \times predictor_{i}$
+
+$\beta \sim Normal(0,10)$
+
+$\sigma \sim HalfCauchy(0,1)$
+
+Very proud of myself for that very simple latex, but anyways. Here we say that our outcome is normally distributed around $\mu$ with variance $\sigma$. $\mu$ is then a function of our predictor times a coefficient $\beta$. The prior on $\beta$ is a normal distribution centered at 0 with a standard deviation of 10, while the prior on our variance is a Half Cauchy with 0 and 1 as the parameters. I don't know what the parameters are for a half cauchy, should probably look that up? First is a location parameter $\mu$ and then a scale parameter $\sigma$. Basically like half of a normal distribution when parameterized this way.
+
+Love that he lays out the ridiculousness (to some degree) of how we refer to regression, multiple regression, ANOVA, ANCOVA, etc. when in reality they are just extensions of this model structure. It's always mapping an outcome onto predictors using some likelihood function. Love to see it.
+
+### 4.2.1 Re-describing the globe tossing model
+
+The example of tossing a globe to assess the proportion of water on said globe can be re-expressed in the language above:
+
+$w \sim Binomial(n, p)$
+$p \sim Uniform(0,1)$
+
+Here we have a binomial likelihood mapping our outcomes, $w$ the number of tosses that come up water, onto $n$ samples (tosses) with a probability of water, $p$. The prior on $p$ is then set as a uniform distribution from 0 to 1. 
+
+Note that the $sim$ symbol implies that all of these are stochastic, which is to say that no outcome or probability drawn from the prior is known with certainty. There are more or less plausible results, but overall the system is probabilistic rather than deterministic. 
+
+
+#### Overthinking: From model to Bayes theorem
+
+Coming from the model above, we can insert it into Bayes' classic equation:
+
+$Pr(p\mid w,n) = \frac{Binomial(w\mid n,p) Uniform(p\mid 0,1)}{\int Binomial(w\mid n,p) Uniform(p\mid 0,1)dp}$
+
+
+This is effectively just our grid approximation from earlier. We calculate the likelihoods for each value on our grid, multiply by the prior, then divide by the sum of that across all values on the grid to get our posterior to sum to 1. Simple as calculus.
+
+
+## 4.3 A Gaussian Model of Height
+
+
+We are going to build a model of height using the data from Nancy Howell's work on the !Kung San.
+
+```{r}
+data("Howell1")
+
+d <- Howell1
+
+str(d)
+```
+
+
+Technically speaking, there are an infinite number of potential Gaussian distributions, with some mean and variance. We are interested then in finding the one that is most plausible given the data we have. What is the 'best fit' mean and variance that would be most likely to generate this data? And, in a Bayesian framework, how certain are we about those parameters?
+
+The general form of our height model is just:
+
+
+$h_{i} \sim Normal(\mu, \sigma)$
+
+
+Just some text here
+
+***
+
+##### Rethinking: Independent and Identically Distributed
+
+Basically, all of our models are going to assume that data within levels are iid, which is to say, they are independent draws from the same underlying distribution. So identically distributed, in that they come from a distribution with the same fixed parameters, but are independent draws from that distribution. An example of non-independence would be physical measurements of related individuals. 
+
+A truly great point here that this assumption - the model assumption of iid as defined by a likelihood function - is an epistemological assumption not an ontological one. It is a tool we use for our understanding, an approximation of reality - a small world assumption of the 'golem' we are building. It is not something inherently true about the world. Otherwise, we engage in what ET Jaynes called the 'mind projection fallacy' where we assume that our understanding of a thing, the structure we impose on it to understand it, must define the thing itself. Signs and signifiers y'all. Maps, territories, you know the drill.
+
+
+
+
+***
+
+
+Also a great point from Ch 1 about how many process models can correspond to the same statistical model. Really fucking me up here Rich, like honestly though, love it. Anyways, this is all to say, we end up with a Gaussian model and associated priors such that:
+
+$h_{i} \sim Normal(\mu, \sigma)$ - Likelihood
+$\mu \sim Normal(178, 20)$ - Prior for $\mu$
+$\sigma \sim Uniform(0,50)$ - Prior for $\sigma$
+
+So the central value (mean) we chose for our prior on $\mu$, 178 cm, is literally just McElreath's height, the idea being we choose a roughly average central value and then a wide variance. So the mean could range anywhere from 138 to 218 cm based on our 95% intervals with a standard deviation of 20 cm. So we have plenty of room to move within that but don't assume it's uniform, there are still more and less plausible values for mean height. Here we use some level of everyday 'expertise' to inform our prior. We can't always do that obviously.
+
+Now we'll plot that prior to get an idea of what it is saying out the distribution of possible means - what means are plausible vs not plausible and so on - as this is what will inform the 'completeness' of our posterior sampling.
+
+```{r}
+curve( dnorm( x , 178 , 20) , from=100, to=250)
+
+curve( dunif( x , 0 , 50) , from=10 , to=60 )
+```
+
+
+Note that while our mean $\mu$ has a normal prior informed by human height, our sigma is uniform as heck - just a straight fuckin brick of probability from 0 to 50. What an absolute unit.
+
+Now we want to sample from the prior. This is like sampling from our posterior before, but now looking just at what information we've not-so-tacitly coded into our priors.
+
+```{r}
+sample_mu <- rnorm(1e4, 178, 20) #sample 10,000 means from our prior of 178,20
+sample_sigma <- runif(1e4, 0,50) #sample 10,000 variances from our uniform prior, 0 to 50.
+
+prior_h <- rnorm(1e4, sample_mu, sample_sigma) # so here I think we basically draw like...10,000 samples from each of our 10,000
+#simulated parameterizations? Like we have two vectors of 10,000 mus and sigmas. We then sample 10,000 from each yeah? No, cuz it ends up still being 10,000 long it looks like, so it must just sample one from each then? Is that right? Doesn't seem to be much in terms of documentaiton of that behavior, so i'll just test it in the console.
+
+#So yeah rnorm will draw a single point form each pair from the vectors. If you ask for more n than there are in each vector, it just
+#loops back and starts again. So like, if I ask for 3 values, but i only provide 2 means and 2 variances, it gives me a draw from pair 1, then one from pair 2, then another from pair 1. Nice.
+
+dens(prior_h) 
+```
+
+
+This plot represents the expected distribution of heights, averaged over our prior. So basically, we draw 10,000 pairs of $\mu$ and $\sigma$ from the prior, then simulate a single data point from each of those 10,000 combinations. This gives us 10,000 draws from what are basically 10,000 different distributions informed by the priors we have set.
+
+
+This seems like a very important idea for exploring how our priors impact our eventual inference I would think. If this seems to bias us towards specific values, then that's probably v bad. by and large though, this seems pretty broad and sensible based on what we no a priori about human height.
+
+---
+
+##### Dropping $\epsilon$
+
+
+McElreath notes that lots of texts teach regression based models in the basic algebraic form:
+
+$h_{i} = \mu + \epsilon_{i}$
+$\epsilon_{i} \sim Normal(0, \sigma)$
+
+Where $\epsilon$ represents an error term that is normally distributed. While I don't see a huge issue with that personally, he points out that this doesn't generalize well to non-Gaussian models. So basically, when we want to work with like, a Binomial or Poisson model, then our $\epsilon$ doesn't really do the job we need. So he opts for the more easily generalized notation:
+
+$h_{i} \sim Normal(\mu, \sigma)$
+
+Since we can just swap out Normal for whatever else we want and it remains roughly the same I think. Particularly because what we are really then doing is making $\mu$ or $\lambda$ or what have you a linear function of some predictors, which are then potentially transformed to the scale of our prediction - using the link function. So it gets us towards GLMs much quicker.
+
+
+
+---
+
+##### Overthinking: Model Definition to Bayes' Theorem
+
+Here we are just going to insert our parameter values from the priors into the actual Bayes equation, simple as can be:
+$$
+Pr(\mu, \sigma \mid h) = \frac{\prod_{i}Normal(h_{i}\mid \mu,\sigma)Normal(\mu\mid 178,20)Uniform(\sigma\mid 0,50)}{\int\int\prod_{i}Normal(h_{i}\mid \mu,\sigma)Normal(\mu\mid 178,20)Uniform(\sigma\mid 0,50)d\mu d\sigma}
+$$
+
+Once again, this looks a lil wild, but it's really just pluggin in our priors. So basically, our posterior probability for a given parameter combination, given our data, ($Pr(\mu, \sigma \mid  h)$) is equal to the likelihood of our data under that model ($Normal(h_{i}\mid \mu,\sigma)$) times the prior probability of those model parameters given our prior ($Normal(\mu\mid 178,20)Uniform(\sigma\mid 0,50)$). We then standardize that by the likelihood of our data given ANY parameterization of the current model structure, which is the denominator, just integrated our posterior over $\mu$ and $\sigma$. 
+
+Also worth noting, he points out that we are going to do the calculations on the log scale, so log likelihoods, which puts us into logarithmic addition rather than multiplication. Noice.
+
+
+Also be careful with spaces and inline latex. Had a weird issue just now with that, so just like...keep an eye out.
+---
+
+
+### 4.3.3 Grid Approximation of the Posterior
+
+So first we are going to set up a full grid approximation of the posterior for our two parameters - $\mu$ and $\sigma$. 
+
+```{r}
+d2 <- d[ d$age >= 18 , ]
+
+mu.list <- seq(from = 140, to = 160, length.out = 200)
+sigma.list <- seq(from=4, to=9, length.out=200)
+
+post <- expand.grid(mu=mu.list, sigma=sigma.list)
+
+
+
+post$LL <- sapply(1:nrow(post), function(i) sum(dnorm( d2$height, mean=post$mu[i], sd=post$sigma[i], log=T)))
+
+post$prod <- post$LL + dnorm(post$mu, 178, 20, TRUE)+dunif(post$sigma, 0, 500, T)
+
+post$prob <- exp(post$prod - max(post$prod))
+
+
+contour_xyz(post$mu, post$sigma, post$prob)
+
+image_xyz(post$mu, post$sigma, post$prob)
+```
+
+
+### 4.3.4 Sampling from the Posterior
+
+As ever, the grid approximation above (and even the eventual quardratic approximation) is not realistic for most real modelling problems. Instead, we usually have samples we sumamrize to characterize the posterior distribution. This is no different that previous samplings of the posterior except that now we have two parameters - meaning we want to sample combinations of them. For now, we start by sampling row numbers based on post$prob. Then we just look at the parameter values.
+
+```{r}
+
+#randomly sample rows based on post$prob
+sample.rows <- sample(1:nrow(post),size=1e4, replace=T, prob = post$prob)
+
+#pull parameter values in those rows
+sample.mu <- post$mu[sample.rows]
+sample.sigma <- post$sigma[sample.rows]
+
+#plot against each other, the more ponts drawn from a given area, the darker the overlay on them. We set alpha low so as we sample the same locations repeatedly
+#they get darker and darker.
+plot(sample.mu, sample.sigma, cex=0.5, pch=16, col=col.alpha(rangi2, 0.1))
+
+#here's a marginal plot of the density for mu and sigma, marginal in the sense that we take all the values of mu - basically averaged over all the values for sigma, and vice versa.
+
+dens(sample.mu)
+dens(sample.sigma)
+
+#notice that both are roughly normal, but that sigma has a slight right tail
+
+HPDI(sample.mu)
+HPDI(sample.sigma)
+
+```
+
+Note that when we start using the map function in later sections, this is the quadratic approximation we talked about earlier it looks like.
+
+###### Overthinking: Sample size and the normality of $\sigma$
+
+Basically this demonstrates that, because we have a normal prior on $\mu$, our posterior will always be Gaussian more or less. But $\sigma$ is a different story. In particular, since variance must always be positive, we are always more uncertain about how large $\sigma$ is than how small $\sigma$ is. The book gives the example of, imagine we estimate $\sigma$ to be close to 0. We know it cannot be much smaller, since it cannot be negative, but it could be much larger. This only becomes a problem with smaller sample sizes. So if we take a small subset of our data (about 20 data points) and refit, we'll see that we end up with an even more pronounced tail.
+
+
+```{r}
+d3 <- sample(d2$height, size=20)
+
+mu.list <- seq(from = 140, to = 160, length.out = 200)
+sigma.list <- seq(from=4, to=9, length.out=200)
+
+post2 <- expand.grid(mu=mu.list, sigma=sigma.list)
+
+
+
+
+post2$LL <- sapply(1:nrow(post2), function(i) sum(dnorm( d3, mean=post2$mu[i], sd=post2$sigma[i], log=T)))
+
+post2$prod <- post2$LL + dnorm(post2$mu, 178, 20, TRUE)+dunif(post2$sigma, 0, 500, T)
+
+post2$prob <- exp(post2$prod - max(post2$prod))
+
+
+sample2.rows <- sample(1:nrow(post2), size=1e4, replace=T, prob=post2$prob)
+
+sample2.mu <- post2$mu[sample2.rows]
+sample2.sigma <- post2$sigma[sample2.rows]
+
+plot(sample2.mu, sample2.sigma, cex=0.5, col=col.alpha(rangi2, 0.1),
+     xlab="mu", ylab='sigma', pch=16)
+
+dens(sample2.sigma, norm.comp = T)
+
+
+
+```
+
+### 4.3.5 Fitting the model with map
+
+The basic idea here is to try and approximate the maximum a posteriori (MAP), basically the peak of the posterior. Not a lot of details on actual quadratic approximation, but it looks like its some sort of gradient ascent kind of thing to locate an estimate of the posterior's peak.
+
+
+```{r}
+d2
+
+
+#now we use alist to bundle all of our model definitions together:
+
+flist <- alist(
+  height ~ dnorm(mu, sigma), #model definition
+  mu ~ dnorm(178, 20), #prior on mu
+  sigma ~ dunif(0, 50) #prior on variance/sigma
+)
+
+m4.1 <- rethinking::map(flist, data=d2)
+precis(m4.1)
+
+```
+
+The values above give a Gaussian approximation for each parameter's marginal distribution. This means the plausibility of each value for $\mu$ averaged over all values for $\sigma$ and vice versa. The intervals here are the 89% intervals, which McElreath points out is no less arbitrary than the 95% intervals - though perhaps less 'mindless.' Also recommends, if people ask why you've chosen 89%, simplying staring at them meaningfully and saying "Because it's prime" which is an energy I, once again, love.
+
+If we compare these intervals to the HPDI from our grid approximation - we see they are basically equivalent. When the posterior is itself Gaussian, we would expect our quadratic approximation and grid approximation to be roughly equivalent.
+
+
+
+
+###### Overthinking: Starting values for map
+
+Map does in fact climb the posterior like a hill - so some sort of gradient ascent to a quadratic approximation. But to do this, like most any other algorithm, it needs starting values. By default, map will draw random values from the prior and then start from there. But you can also specify your own starting values in a list. It is important to remember that it is a list, rather than an alist. A list evaluates the code you present, so when I say mean(d2$height), it actually calculates the mean vaue and passes that through. alist does not evaluate code, so when I pass it mu ~ dnorm(178,20), it doesn't actually draw values from dnorm or anything like that. It keeps that actual text and passes that to map when we fit the model - which is important for approximations or MCMC or HMC algorigthms. Anyways. That's all I think.
+
+----
+
+Now we are going to play a bit with our prior when feeding it to map. In this case, we are going to narrow the prior on $\mu$ down to 0.1 rather than 20. So we have a VERY narrow prior compared to what we had before.
+
+```{r}
+m4.2 <- map(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu ~ dnorm(178,0.1),
+    sigma ~ dunif(0, 50)
+  ), data = d2
+)
+
+precis(m4.2)
+```
+Two important things to notice here:
+
+1. Our estimate for $\mu$ has not moved from 178, which makes sense given our prior. We basically told it only values within like 0.2 of 178 are likely and so we only really traversed that area by biasing the posterior strongly when compared to our likelihood.
+
+2. Our estimate of $\sigma$ has ballooned significantly, even though we did not adjust its prior. This is because our estimate of each parameter is conditional on the other! So if we constrain where $/mu$ can go, $\sigma$ ends up needing to change to get a model that explains our data well. We end up with what is really an unlikely or poor estimate of $\mu$ and then a very large variance to help explain our data's variance away from that mean.
+
+
+In this case our prior has strongly biased our estimate, but this is mostly because we chose a ridiculously narrow variance for it. Given the amount of data we have, our choice of prior should not have a huge impact generally - especially for such a simple model. In the future though, our priors will have a much stronger impact.
+
+##### Overthinking: How strong is a prior?
+
+We can estimate the strength of a prior by reimagining it as the product of previous sampling. We can do this using equation for the standard deviation, such that the $\sigma$ for our prior is treated as the $\sigma$ for a previous posterior. 
+
+$\sigma_{post} = 1/\sqrt{n}$
+
+So in our overly narrow prior, with 0.1, this would indicate a previous sample where $0.1 = 1/\sqrt{n}$ such that $n = 100$. So that would suggest that in a previous experiment we had a sample size of 100 with a mean height of 178. This also assumes some amount of unit variance which isn't necessarily justified by hey. Anyways, that's a very strong prior is the point. Whereas before, when we set our $\sigma = 20$, we end up with $20 = 1/\sqrt{n}$ which leads to a sample size of 0.0025. So well below a single observation. We would then consider this a very weak prior (with the assumption once again of a sum of squared variance equalling 1). Our narrow prior, with an assumed sample size of 100, would be a much stronger prior. We would need a sample of 100 with a mean of 178 etc to get that strong of a prior. So that's a nice intuitive way to examine how "strong" our priors are, thinking of them as being based on a previous sample.
+
+---
+
+
+##### 4.3.6 Sampling from a map fit
+
+Core concept here is that getting a quadratic approximation of two parametrs, $\mu$ and $\sigma$, is a multivariate Gaussian. This leads to a slightly more complex set of summary statistics. For a univariate Gaussian, you can get by with just your mean and SD (or variance, which is just $sd^{2}$). For a multivariate Gaussian, we have covariance for each of those parameters. This decomposes into two components which are what I want to focus on: 1) a vector of variances for the parameters themselves 2) a correlation matrix that describes how a change in one parameter generates a correlated change in the other parameters.
+
+```{r}
+
+#This is the variance of our model parameters. If you take the square root of this you get the sd from our precis output earlier
+diag(vcov(m4.1))
+
+#This is our correlation matrix describing how a change in each parameter leads to a change in the others. So diagonals obviously are all 1. But then our off-diagonals are small and symmetrical - suggesting that as we change mu we get a small change in sigma and vice versa. Since it is symmetrical we get the same change regardless of which one we change. The important thing here is that these are quite small - suggesting that our knowledge of mu and sigma are largely independent. Knowing mu doesn't tell us much about sigma and vice versa. True for simple Gaussians, but as we get more complex, apparently not??
+cov2cor(vcov(m4.1))
+
+
+#the rethinking package provides a nice convencience function for sampling from this multivariate posterior
+
+post <- extract.samples(m4.1, n=1e4)
+head(post)
+```
+
+
+
+##### 4.4 Adding a Predictor
+
+We now add weight to our model of height - making this a Gaussian regression. First let's plot though.
+
+```{r}
+plot(d2$height~d2$weight)
+```
+
+There's very obviously a relationship here - knowing a person's weight gives you an idea of their height. Thus the two are non-independent. We can use one to predict the other.
+
+###### Rethinking: What is 'regression?'
+
+Takes it back to Galton's regression to the mean. Basically you wouldn't try and predict a son's height just from the father's height. Better to try and use the 'pool' of fathers by using the mean. We then end up with a prediction for each son but one that is 'shrunk' towards the mean. This shrinkage is typically quite robust and forms the basis of our eventual multilevel modelling approaches.
+
+---
+
+##### 4.4.1 The linear model strategy
+
+
+Here we introduce our first linear model. Basically what this does is just treats $\mu$ as a linear function of our predictor, in this case weight. The posterior distribution the describes the relative plausibility of different strengths of the association between the two. Math-wise this is the relative plausibility of our $\beta$ coefficient. $\beta$ tells us how much $y$ changes as a function of $x$, and so tells us both the magnitude and direction of the association between them. The posterior then ranks these values based on their relative plausibility given the data and the model. So how likely is any of the infinite values of $\beta$ if we know it had to generate our data under the given model structure? That's what it's trying to answer.
+
+How do we fit this into the old model framework? Pretty easily actually:
+
+$h_{i} \sim Normal(\mu, \sigma)$
+$\mu_{i} = \alpha + \beta x_{i}$
+$\alpha \sim Normal(178, 100)$ 
+$\beta \sim Normal(0, 10)$
+$\sigma \sim Uniform(0,50)$
+
+Here we've shifted a few of our priors, but overall it is more or less the same. The big change is that $\mu$ no longer has its own separate prior. It is instead a linear function of an intercept, $\alpha$, a slope describing the association, $\beta$, and our predictor, $x_{i}$. We can break this down into conceptual units as well: 
+
+1) Likelihood: $h_{i} \sim Normal(\mu, \sigma)$
+2) Linear Model: $\mu_{i} = \alpha + \beta x_{i}$
+3) Intercept Prior: $\alpha \sim Normal(178, 100)$ 
+4) $\beta$ Prior: $\beta \sim Normal(0, 10)$
+5) $\sigma$ Prior: $\sigma \sim Uniform(0,50)$
+
+Let's highlight the 'regression to the mean' component here, which we can see in the addition of the index $i$ to $\mu$. What this means is we no longer have a constant mean. Instead, we have a predicted mean for each individual data point. This is where we get that 'shrinkage' idea. Instead of trying to predict each individual data point, we instead try and predict an average near to it. We end up with some noise, but with good general predictive power. Also note that the linear model does not use $\sim$. It uses $=$, because the relationship between $\alpha, \beta$ and $\mu_{i}$ is not stochastic, it is deterministic. The relationship between $\mu_{i}$ and $h_{i}$ remains stochastic though, so keep that in mind.
+
+McElreath makes a point to explain that $\alpha$ and $\beta$ are 'made up' parameters. More importantly, these are the 'targets of learning' in our model. They answer specific questions we want the model/golem to be able to answer: 
+
+1) What is the value of $h_{i}$ when $x_{i} = 0$? This is what $\alpha$ captures for us
+
+2) How much does $h_{i}$ change as $x_{i}$ changes? This is what our $\beta$ value describes.
+
+As we progress, we can ask more and more nuanced questions of our golem using more complex novel parameters.
+
+###### Overthinking: Regression and units
+
+It is worth keeping in mind that when we add in a predictor, our units get mixed. So in our height ~ weight regression, we have $\mu$ and $\sigma$ both in cm, $\alpha$ in cm, and then weight in kg. Since weight is in kg, and $\beta$ relates our weight to height, for $\beta$ to churn out the correct units, it must be in cm/kg. That way our kg cancel. This then makes it a sort of rate. McElreath notes that there is a tradition called dimensional analysis that advocates constructing and modeling dimensionless variables. In this case, we might divide all of our data by an average height, thus removing the cm and leaving dimensionless relational values. The idea here is that since all units are really human constructions, it may be more 'natural' or 'intuitive' to model values agnostic of these idiosyncratic metrics. Also seems likely to require some wild ass abstraction to really grasp though, so who knows.
+
+---
+
+Lastly we have our priors. For our intercept, we once again use our author's height along with a very wide $\sigma$. This allows that intercept value to move pretty far away from that average, which is good for an intercept - particularly I would guess when we have a strong relationship like the height ~ weight regression we are working with.
+
+$\simga$ is once again uniform and broad, and always positive. The prior on $\beta$ is the last thing that needs discussion. We center it at zero, allowing equal plausibility of a positive or negative relationship. We then give it pretty healthy spread with a $\sigma$ of 10. This isn't entirely sensible, since we can see from the plot that we have a strong positive relationship. So equally weighting negative relationships is a bit wasteful when doing a posterior sampling procedure. However, given the amount of data we have here, not a huge deal. But in other situations, where data is less plentiful and the association weaker, a prior is a good way to nudge our model towards quicker convergence on a correct value.
+
+As it stands, these very weak priors will likely lead to similar inference as an ML regression, just with the added benefit of the posterior distribution's summary of uncertainty.
+
+```{r}
+library(rethinking)
+data("Howell1")
+d <- Howell1
+
+d2 <- d[d$age>=18,]
+
+
+
+m4.3 <- rethinking::map(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a + b*weight,
+    a ~ dnorm(156, 100),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0, 50)
+    ),
+  data=d2
+)
+
+precis(m4.3, corr = T)
+cov2cor(vcov(m4.3))
+
+#note here that our a and b estimates are almost perfectly negatively correlated. This makes sense for a simple model, as any change to our slope yields a different best fit intercept and vice versa. But if we have a more complex model that could be v bad.
+
+#now we'll center our data by subtracting the mean from all data points.
+
+d2$weight.c <- d2$weight - mean(d2$weight)
+
+
+m4.4 <- rethinking::map(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a+b*weight.c,
+    a ~ dnorm(158,100),
+    b ~ dnorm(0, 10),
+    sigma ~ dunif(0,50)
+  ), data=d2
+)
+
+precis(m4.4, corr=TRUE)
+cov2cor(vcov(m4.4))
+
+#so now our b is unchanged, but a is the same as the mean height in the data and the correlation among parameters has dropped to 0. What we have done is fiddled with what the intercept really is. Normally our intercept is what our outcome is when the predictor is 0. But now the mean of the predictor is 0, meaning the intercept is the value we expect for our outcome when the predictor is at its mean. Nifty. 
+
+
+#plot the best fit line from model
+plot(height~weight, data=d2)
+
+abline(a=coef(m4.3)["a"], b=coef(m4.3)['b'])
+
+#add uncertainty from posterior sampling
+
+post <- extract.samples(m4.3)
+
+post[1:5,]
+
+N <- 10
+
+dN <- d2[1:N,]
+
+
+
+#Gonna skip to where he actually does it
+
+mu <- link(m4.3)
+str(mu)
+
+#the link function here gives us a distribution of mu for each height in the original dataset, so a matrix with 1000 samples from the posterior for each of the 352 heights in our data.
+
+#we want t a distribution for everything along the x axis though, so we have to generate some data then pass that to link.
+
+weight.seq <- seq(from=25, to =70, by=1)
+
+mu <- link(m4.3, data = data.frame(weight=weight.seq))
+
+plot(height ~ weight, data=d2, type='n')
+
+for(i in 1:100){
+  points(weight.seq, mu[i,], pch=16, col=col.alpha(rangi2,0.1))
+} 
+
+
+
+
+```
+
+I'll skip ahead here because I can.
+
+---
+
+###### Rethinking: Overconfident confidence intervals
+
+Basically, keep in mind that our CI's are only as good as the model. Even a shit model can have tight intervals. Best to think of it as: conditional on the assumption that height and weight are linked by a linear function, this is the most plausible line and these are its most plausible bounds.
+
+---
+
+Important concept here: when we move beyond just looking at uncertainty in the mean and start looking at overall uncertainty, we have to take into account that gaussian $\sigma$. Up till now, all of our posterior estimates have centered around the uncertainty in $\mu$ but not in the overall distribution of heights. So we've been looking at how does our estimate of the average vary but not at how the distribution itself is uncertain. So there's a chunk of code in the book that covers this.
+
+
+
+
+
+
+
+### 4.5 Polynomial Regression
+
+Now we look at a curved line
+
+
+```{r}
+library(rethinking)
+data("Howell1")
+d <- Howell1
+
+plot(d$height~d$weight)
+
+d$weight.s <- ( d$weight - mean(d$weight) )/sd(d$weight)
+```
+
+Now we can see that, when including non-adult individuals, we have a non-linear relationship. Not sure how I feel about him calling it a bivariat regression. Once again, only one probability distribution used here for our response variable, so still a univariate by my thinking.
+
+As ever, polynomial regression is dicey. They are very difficult to interpret, and there's the whole issue of highly correlated predictors. But here we go anyways!
+
+$\mu_{i} = \alpha + \beta_{1} x_{i} + \beta_{2} x_{i}^2$
+
+This is a parabolic function, a second order function of x. Here $\beta_{2}$ measures the strength of that curve.
+
+We start by standardizing our variable. This helps control for scale and get an idea of the relative importance of each predictor. Downside is of course interpretation or prediction on the natural scale of the predictor.
