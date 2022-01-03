@@ -521,12 +521,12 @@ d <- Howell1
 
 d2 <- d[d$age>=18,]
 
-
+x_bar <- mean(d2$weight)
 
 m4.3 <- rethinking::map(
   alist(
     height ~ dnorm(mu, sigma),
-    mu <- a + b*weight,
+    mu <- a + b*(weight-x_bar),
     a ~ dnorm(156, 100),
     b ~ dnorm(0, 10),
     sigma ~ dunif(0, 50)
@@ -601,7 +601,202 @@ for(i in 1:100){
 
 ```
 
-I'll skip ahead here because I can.
+
+Note that the above code differs from the second edition, which switches to quap rather than map. Ah well, can't win em all. IIRC, both do get the quadratic approximation of the mode of the posterior but I think map might just be older? Dunno. Docs don't really distinguish between the two but both quap and map are found in the docs for map. As in, map redirects to quap now. So maybe a deprecated older version? Who knows...
+
+###### Overthinking: Logs and exps, oh my.
+
+Basically McElreath notes, pretty correctly I'd say, that most people working in the life and social sciences don't think in logarithms or exponentials much. He gives a working (and very simplified) definition that $y = log(x)$ assigns y the order of magnitude of x. Like if x is in the 10,000s I assume he means that y ends up around 9.2. Going to be 100% honest here, I don't fully understand what he means here. Unsurprisingly I also don't think in logarithms (though I have gotten better with exponentials if I do say so myself). So let's dig until we at least get to the point that he's talking about.
+
+{Alright so the logarithmic function tells you what power you would have to raise a given base to to get the value we give it. So, when I say $\log(10,000) = 9.2$, what I mean is that $e^{9.2} \approx 10,000$. If we use a different base we get a different logarithm. By default, R uses the exponential constant, $e$, as the base for the log function. Base 10 is pretty common too though and the command for that is log10. Anyways, to get back to our intuition of logarithms, when I log transform my data, I'm looking for the exponent I'd have to put on $e$ to get that value. So in a sense, yeah I am assigning an order of magnitude in base $e$ to $y$. I guess the difficulty there is that I tend to think of orders of magnitude in terms of 10, like lots of people do. So you think of going from 10 to 100 and that's an order of magnitude because thats a $10^1$ jumping to $10^2$. But if we switch bases to $e$ (natural logs for those keeping track), we end up with a slightly different intuition for what a change in order of magnitude translates to. Probably good to keep that in mind when using R's standard log function as opposed to log10. Alright, now we can keep going with his example of a log normal prior.
+
+---
+
+```{r}
+
+library(rethinking)
+data(Howell1)
+d <- Howell1
+d2 <- d[d$age >=18,]
+x_bar <- mean(d2$weight)
+
+#the key difference in the model below is that our posterior distribution is no longer Beta, it is log(Beta). This is because we transform beta using our exp function, meaning that we are treating it as a logarithm. God that's a weird intuition to have to get used to but I'm sure we will. Maybe. I dunno.
+
+
+m4.3b <- quap(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a + exp(log_b)*(weight-x_bar),
+    a ~ dnorm(178,20), #a prior for intercept informed more by our understanding of human heights than by our sample
+    log_b ~ dnorm(0,1),
+    sigma ~ dunif(0,50)
+  ), data = d2
+)
+summary(m4.3b)
+
+#so our mean slope estimate is -0.1, which when transformed back gives us about 0.9. 
+
+```
+
+
+
+
+So now we have some nice models but we don't really know how to interpret them. Or, we do know how to interpret them, looking at tables of coefficient estimates and interpreting the values reported as their impact on our response variable. Which is great! Why wouldn't you? But as we add in multiple predictors, interactions, and (shortly) the dreaded polynomials, interpreting our coefficient tables becomes much more complicated. So we have a seond approach to interpreting models, similar to what we do when testing the suitability of priors: we simulate. As a theoritician, there's nothing I love more than some simulations. So now that we have a model, we can simulate data from it, both in terms of our predicted means and even adding in noise from our sigma estimate to get simulated data.
+
+First let's walk through our marginal distributions though:
+
+```{r}
+precis(m4.3)
+
+```
+
+Here we see our three parameters (note that it's not so different from our log_b model once we transform log_b back to b) with mean, sd, and some nice CIs. For Beta, our slope relating height and weight, we get an estimate of 0.9. We can interpret this as "a person 1 kg heavier would be, on average, 0.9 cm taller." 89% of our posterior density sits between 0.84 and 0.97 - meaning that values close to 0 or well above 1 are not compatible with our data and model. Note that we include our model in the definition of compatibility - here we have assumed a linear relationship between height and weight. We are assuming that as weight increases there is fixed amount that height should increase. This may not be the case, so, what our output really means is, so long as you are assuming a straight line defines this relationship, it's unlikely our slope is either close to 0 or well above 1.
+
+
+Now that we have some parameters describing our predicted mean height, in particular $\alpha$ and $\beta$, we have to remember that we have a joint distribution for $\mu$ and subsequently we gave to keep an eye on our covariance matrix for parameter estimates.
+
+```{r}
+
+round(vcov(m4.3),3)
+
+sqrt(diag(round(vcov(m4.3),3)))
+```
+
+Uhhh that shouldn't be like that? His covariance matrix is quite different. In particular, $\alpha * \alpha$ covariance is like 0.07 in his and the covariance of $\alpha$ and $\beta$ is 0. Hmm not sure what to do with that tbh. Ahhh okay it was because in the original first edition he doesn't regress on the residuals of weight, weight - x_bar, he just regresses on the raw data. If we swap it out with the new second edition substitution, we get our covariance under control. Interesting. I wonder why that happens? Let's uhhh have a look on the interwebz and see what we find. Be back momentarily.
+
+Okay didn't find much on the web cuz I'm guessing this is actually pretty intuitive. Basically, by changing our predictor to residuals, we change the magnitude they exist on. Thus we also reduce the magnitude we'd expect to see for our variances and covariances. That being said, one thing I did find on the interwebz was that, since the diagonals of our vcov matrix are the variance of the posterior for our parameter estimates, we can take the square root of those values to retrieve the standard deviations reported in our model output. That's what the second line there does. The internet claims those are the standard errors of a non-bayesian model but I don't know if that's correct. The variance would be the sum of squared deviance, which you'd have to sqrt to get the standard deviation? Then divide by square root n to get the error? But maybe it's different for parameter estimates in models? hmm......They do say its the variance of the sampling distributions so I guess if you get the SD of the samplING distro that is the standard error. Might just have to prove to myself sometime that the variance of a frequentist estimate is the variance of the sampling distro. Regardless, here we treat it as the variance in the posterior and its sqrt gives us the SD reported in the model output. Sensible.
+
+
+Lmao he says at the end of this section that the lack of covariance and variance comes from centering our variables. Damn, I really should read before I type.
+
+
+```{r}
+
+#this puts our coefficient estimates and vcov matrix together
+
+pairs(m4.3)
+
+```
+
+
+
+##### 4.4.3.2 Plotting posterior inferenace against the data
+
+As I mentioned earlier, just looking at tables of coefficient estimates and covariance of parameters has limited utility as we get further into modelling. So here we'll look at the other end of model evaluation which is simulating and plotting. First we'll plot our data against the predicted means of our model.
+
+```{r}
+plot(height ~weight, data=d2, col=rangi2)
+post <- extract.samples(m4.3)
+a_map <- mean(post$a)
+b_map <- mean(post$b)
+curve(a_map + b_map*(x-x_bar), add=T)
+```
+
+As we know, there are infinitely many lines that could fit this data, each with its own posterior probability of having generated this data given our model structure and priors. So now we'll work on adding uncertainty to our plot. 
+
+He uses this as an opportunity to discuss how sample size also impacts certainty so I'll take that opportunity too I guess.
+```{r}
+N <- 10
+N2 <- 50
+N3 <- 150
+N4 <-  352
+
+dN <- d2[1:N,]
+dN2<- d2[1:N2,]
+dN3<- d2[1:N3,]
+dN4<- d2[1:N4,]
+
+mN <- quap(
+  alist(
+    height ~dnorm(mu, sigma),
+    mu <- a + b*(weight-mean(weight)),
+    a ~ dnorm(178,10),
+    b ~ dlnorm(0,1),
+    sigma ~ dunif(0,50)
+  ), data=dN
+)
+
+
+mN2 <- quap(
+  alist(
+    height ~dnorm(mu, sigma),
+    mu <- a + b*(weight-mean(weight)),
+    a ~ dnorm(178,10),
+    b ~ dlnorm(0,1),
+    sigma ~ dunif(0,50)
+  ), data=dN2
+)
+
+mN3 <- quap(
+  alist(
+    height ~dnorm(mu, sigma),
+    mu <- a + b*(weight-mean(weight)),
+    a ~ dnorm(178,10),
+    b ~ dlnorm(0,1),
+    sigma ~ dunif(0,50)
+  ), data=dN3
+)
+
+mN4 <- quap(
+  alist(
+    height ~dnorm(mu, sigma),
+    mu <- a + b*(weight-mean(weight)),
+    a ~ dnorm(178,10),
+    b ~ dlnorm(0,1),
+    sigma ~ dunif(0,50)
+  ), data=dN4
+)
+
+
+
+#now we'll extract 20 samples from the posterior for each model
+
+postN <-  extract.samples(mN, n=20)
+postN2 <-  extract.samples(mN2, n=20)
+postN3 <-  extract.samples(mN3, n=20)
+postN4 <-  extract.samples(mN4, n=20)
+
+plot(dN$weight, dN$height, xlim=range(d2$weight), ylim=range(d2$height),
+     col=rangi2, xlab="weight", ylab="height")
+mtext(concat("N = ", N))
+#now plot our posterior sample lines
+for(i in 1:20)
+  curve(postN$a[i]+postN$b[i]*(x-mean(dN$weight)),
+        col=col.alpha("black", 0.3), add=T)
+
+
+
+plot(dN2$weight, dN2$height, xlim=range(d2$weight), ylim=range(d2$height),
+     col=rangi2, xlab="weight", ylab="height")
+mtext(concat("N = ", N2))
+#now plot our posterior sample lines
+for(i in 1:20)
+  curve(postN2$a[i]+postN2$b[i]*(x-mean(dN2$weight)),
+        col=col.alpha("black", 0.3), add=T)
+
+
+plot(dN3$weight, dN3$height, xlim=range(d2$weight), ylim=range(d2$height),
+     col=rangi2, xlab="weight", ylab="height")
+mtext(concat("N3 = ", N3))
+#N3ow plot our posterior sample lines
+for(i in 1:20)
+  curve(postN3$a[i]+postN3$b[i]*(x-mean(dN3$weight)),
+        col=col.alpha("black", 0.3), add=T)
+
+
+plot(dN4$weight, dN4$height, xlim=range(d2$weight), ylim=range(d2$height),
+     col=rangi2, xlab="weight", ylab="height")
+mtext(concat("N4 = ", N4))
+#N4ow plot our posterior sample lines
+for(i in 1:20)
+  curve(postN4$a[i]+postN4$b[i]*(x-mean(dN4$weight)),
+        col=col.alpha("black", 0.3), add=T)
+
+
+
+```
+
+As we add in more data we can see that our uncertainty in the average relationship decreases. We get tighter and tighter bundling of predicted lines. So that's cool. MOre data = more certainty in parameter estimates conditional on our sample, model structure, and priors. Does that mean the model is good? Not necessarily. Like always, keep worrying you're wrong, right? You probably are.
 
 ---
 
@@ -614,6 +809,11 @@ Basically, keep in mind that our CI's are only as good as the model. Even a shit
 Important concept here: when we move beyond just looking at uncertainty in the mean and start looking at overall uncertainty, we have to take into account that gaussian $\sigma$. Up till now, all of our posterior estimates have centered around the uncertainty in $\mu$ but not in the overall distribution of heights. So we've been looking at how does our estimate of the average vary but not at how the distribution itself is uncertain. So there's a chunk of code in the book that covers this.
 
 
+I in fact did not add this chunk of code so uhhh
+
+```{r}
+
+```
 
 
 
