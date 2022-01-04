@@ -20,7 +20,7 @@ The core logic has to do with random draws from any distribution. Every draw rep
 
 To carry this further, there are many many ways to cancel out positive or negative deviations. But there are very few ways (ie permutations of our events) that yield large negative or positive sums. Thus we see our inevitable Gaussian. So that brings us back to the max entropy perspective. Our central values make the fewest assumptions about our underlying events that constitute the sums. Large values can only be made by many steps in one direction or a few large steps with few small steps in the opposite. So you can think of it like, there is an equal probability of any given permutation. But permutations can have the same sum. And as we move closer to the center, we have more and more permutations that have the same sum - thus, given they are all equally probable, we would expect certain sums to appear much more frequently. So the normal distribution emerges. Heck yeah.
 
-```{r}
+```{r Normal by addition}
 #setion 4.1.1 - Normal by addition
 
 #simulating the coin toss and step example for explaining the normal distribution.
@@ -40,7 +40,7 @@ Now we look at multiplicative effects. Frame story is multiple loci affecting a 
 AHH FUCK it's because in this example, the multiplicative elements are quite small. Multiplying numbers with small differences ain't all that different from adding them, and so we could actually substitute a sort of additive approximation. Wonder if this breaks down then if differences, e.g. effects of each multiplicative element are larger, even if still roughly equal?
 
 
-```{r}
+```{r Normal by multiplication}
 
 #section 4.1.2 - Normal by multiplication
 
@@ -69,7 +69,7 @@ dens(big, norm.comp = T)
 
 Unsurprisingly, while larger effects do not produce Gaussian distributions when just multiplied together, they are normally distributed when multiplied together on a log scale. Collapsing those differences as ever, such that we could represent them as additive processes without too much loss.
 
-```{r}
+```{r Normal by log multiplication}
 log.big <- replicate(10000, log(prod(1+runif(12,0,0.5))))
 dens(log.big, norm.comp = T)
 ```
@@ -162,7 +162,7 @@ This is effectively just our grid approximation from earlier. We calculate the l
 
 We are going to build a model of height using the data from Nancy Howell's work on the !Kung San.
 
-```{r}
+```{r Gaussian model of Height - starter}
 data("Howell1")
 
 d <- Howell1
@@ -205,7 +205,7 @@ So the central value (mean) we chose for our prior on $\mu$, 178 cm, is literall
 
 Now we'll plot that prior to get an idea of what it is saying out the distribution of possible means - what means are plausible vs not plausible and so on - as this is what will inform the 'completeness' of our posterior sampling.
 
-```{r}
+```{r Prior predictive checks}
 curve( dnorm( x , 178 , 20) , from=100, to=250)
 
 curve( dunif( x , 0 , 50) , from=10 , to=60 )
@@ -216,7 +216,7 @@ Note that while our mean $\mu$ has a normal prior informed by human height, our 
 
 Now we want to sample from the prior. This is like sampling from our posterior before, but now looking just at what information we've not-so-tacitly coded into our priors.
 
-```{r}
+```{r More Prior Predictives}
 sample_mu <- rnorm(1e4, 178, 20) #sample 10,000 means from our prior of 178,20
 sample_sigma <- runif(1e4, 0,50) #sample 10,000 variances from our uniform prior, 0 to 50.
 
@@ -275,7 +275,7 @@ Also be careful with spaces and inline latex. Had a weird issue just now with th
 
 So first we are going to set up a full grid approximation of the posterior for our two parameters - $\mu$ and $\sigma$. 
 
-```{r}
+```{r Grid Approximation of Posterior}
 d2 <- d[ d$age >= 18 , ]
 
 mu.list <- seq(from = 140, to = 160, length.out = 200)
@@ -302,7 +302,7 @@ image_xyz(post$mu, post$sigma, post$prob)
 
 As ever, the grid approximation above (and even the eventual quardratic approximation) is not realistic for most real modelling problems. Instead, we usually have samples we sumamrize to characterize the posterior distribution. This is no different that previous samplings of the posterior except that now we have two parameters - meaning we want to sample combinations of them. For now, we start by sampling row numbers based on post$prob. Then we just look at the parameter values.
 
-```{r}
+```{r Sampling from the Posterior}
 
 #randomly sample rows based on post$prob
 sample.rows <- sample(1:nrow(post),size=1e4, replace=T, prob = post$prob)
@@ -334,7 +334,7 @@ Note that when we start using the map function in later sections, this is the qu
 Basically this demonstrates that, because we have a normal prior on $\mu$, our posterior will always be Gaussian more or less. But $\sigma$ is a different story. In particular, since variance must always be positive, we are always more uncertain about how large $\sigma$ is than how small $\sigma$ is. The book gives the example of, imagine we estimate $\sigma$ to be close to 0. We know it cannot be much smaller, since it cannot be negative, but it could be much larger. This only becomes a problem with smaller sample sizes. So if we take a small subset of our data (about 20 data points) and refit, we'll see that we end up with an even more pronounced tail.
 
 
-```{r}
+```{r Small Sample normality}
 d3 <- sample(d2$height, size=20)
 
 mu.list <- seq(from = 140, to = 160, length.out = 200)
@@ -371,7 +371,7 @@ dens(sample2.sigma, norm.comp = T)
 The basic idea here is to try and approximate the maximum a posteriori (MAP), basically the peak of the posterior. Not a lot of details on actual quadratic approximation, but it looks like its some sort of gradient ascent kind of thing to locate an estimate of the posterior's peak.
 
 
-```{r}
+```{r Quadratic Approximation of MAP}
 d2
 
 
@@ -403,7 +403,7 @@ Map does in fact climb the posterior like a hill - so some sort of gradient asce
 
 Now we are going to play a bit with our prior when feeding it to map. In this case, we are going to narrow the prior on $\mu$ down to 0.1 rather than 20. So we have a VERY narrow prior compared to what we had before.
 
-```{r}
+```{r Narrowing our Prior}
 m4.2 <- map(
   alist(
     height ~ dnorm(mu, sigma),
@@ -438,7 +438,7 @@ So in our overly narrow prior, with 0.1, this would indicate a previous sample w
 
 Core concept here is that getting a quadratic approximation of two parametrs, $\mu$ and $\sigma$, is a multivariate Gaussian. This leads to a slightly more complex set of summary statistics. For a univariate Gaussian, you can get by with just your mean and SD (or variance, which is just $sd^{2}$). For a multivariate Gaussian, we have covariance for each of those parameters. This decomposes into two components which are what I want to focus on: 1) a vector of variances for the parameters themselves 2) a correlation matrix that describes how a change in one parameter generates a correlated change in the other parameters.
 
-```{r}
+```{r Pulling smaples from a MAP fit}
 
 #This is the variance of our model parameters. If you take the square root of this you get the sd from our precis output earlier
 diag(vcov(m4.1))
@@ -459,7 +459,7 @@ head(post)
 
 We now add weight to our model of height - making this a Gaussian regression. First let's plot though.
 
-```{r}
+```{r Plot height ~ weight}
 plot(d2$height~d2$weight)
 ```
 
@@ -514,7 +514,7 @@ $\simga$ is once again uniform and broad, and always positive. The prior on $\be
 
 As it stands, these very weak priors will likely lead to similar inference as an ML regression, just with the added benefit of the posterior distribution's summary of uncertainty.
 
-```{r}
+```{r Adding a predictor}
 library(rethinking)
 data("Howell1")
 d <- Howell1
@@ -612,7 +612,7 @@ Basically McElreath notes, pretty correctly I'd say, that most people working in
 
 ---
 
-```{r}
+```{r Lognormal beta}
 
 library(rethinking)
 data(Howell1)
@@ -645,7 +645,7 @@ So now we have some nice models but we don't really know how to interpret them. 
 
 First let's walk through our marginal distributions though:
 
-```{r}
+```{r Evaluating the model - table of coefficients}
 precis(m4.3)
 
 ```
@@ -655,7 +655,7 @@ Here we see our three parameters (note that it's not so different from our log_b
 
 Now that we have some parameters describing our predicted mean height, in particular $\alpha$ and $\beta$, we have to remember that we have a joint distribution for $\mu$ and subsequently we gave to keep an eye on our covariance matrix for parameter estimates.
 
-```{r}
+```{r Covariance table and standard deviation}
 
 round(vcov(m4.3),3)
 
@@ -670,7 +670,7 @@ Okay didn't find much on the web cuz I'm guessing this is actually pretty intuit
 Lmao he says at the end of this section that the lack of covariance and variance comes from centering our variables. Damn, I really should read before I type.
 
 
-```{r}
+```{r Both together}
 
 #this puts our coefficient estimates and vcov matrix together
 
@@ -684,7 +684,7 @@ pairs(m4.3)
 
 As I mentioned earlier, just looking at tables of coefficient estimates and covariance of parameters has limited utility as we get further into modelling. So here we'll look at the other end of model evaluation which is simulating and plotting. First we'll plot our data against the predicted means of our model.
 
-```{r}
+```{r Plotting samples from posterior}
 plot(height ~weight, data=d2, col=rangi2)
 post <- extract.samples(m4.3)
 a_map <- mean(post$a)
@@ -695,7 +695,7 @@ curve(a_map + b_map*(x-x_bar), add=T)
 As we know, there are infinitely many lines that could fit this data, each with its own posterior probability of having generated this data given our model structure and priors. So now we'll work on adding uncertainty to our plot. 
 
 He uses this as an opportunity to discuss how sample size also impacts certainty so I'll take that opportunity too I guess.
-```{r}
+```{r Plotting uncertainty w/ different sample sizes}
 N <- 10
 N2 <- 50
 N3 <- 150
@@ -796,7 +796,78 @@ for(i in 1:20)
 
 ```
 
-As we add in more data we can see that our uncertainty in the average relationship decreases. We get tighter and tighter bundling of predicted lines. So that's cool. MOre data = more certainty in parameter estimates conditional on our sample, model structure, and priors. Does that mean the model is good? Not necessarily. Like always, keep worrying you're wrong, right? You probably are.
+As we add in more data we can see that our uncertainty in the average relationship decreases. We get tighter and tighter bundling of predicted lines. So that's cool. More data = more certainty in parameter estimates conditional on our sample, model structure, and priors. Does that mean the model is good? Not necessarily. Like always, keep worrying you're wrong, right? You probably are.
+
+
+Alright so now, rather than plotting a bunch of regression lines, we want to plot some contours/intervals to represent this uncertainty. First we'll work with a single x value, 50 kg. We start by extracting 10,000 values for $\alpha$ and $\beta$ from the posterior, then calculate a predicted $\mu$ at $x = 50$. This will give us a vector of 10,000 predicted means. Since each draw from the posterior gives us a sample for $\alpha$ and $\beta$ taking into account the correlation inherent in our estimates, we can look "push" our uncertainty in both parameters through into an estimate of the uncertainty in $\mu$.
+
+```{r Constructing intervals/contours}
+post <- extract.samples(m4.3)
+mu_at_50 <- post$a + post$b *(50-x_bar)
+```
+
+
+The code alongside mu_at_50 is our actual linear model, substituting in an actual value of for $x_{i}$, 50:
+
+$$
+\mu_{i} = \alpha + \beta(x_{i} - \overline{x})
+$$
+
+We can evaluate the distrubtion of predicted means a couple of different ways, first as a distribution and second as intervals:
+```{r}
+dens(mu_at_50, col=rangi2, lwd=2., xlab="mu|weight=50")
+PI(mu_at_50, prob = 0.89)
+```
+
+Now we want to do the same thing but for every unique value in our original data, here using McElreath's very convenient link function. Link basically does what we just did but for each value used in the original model or with whatever data we provide it. in our case, we are going to provide it with a sequence of x values that span the range of weights seen in our data:
+
+```{r}
+weight.seq <- seq(from=25, to=70, by =1)
+
+mu <- link(m4.3, data=data.frame(weight=weight.seq))
+str(mu)
+
+
+#now we'll plot our values
+
+plot(height ~ weight, d2, type="n")
+
+for(i in 1:100)
+  points(weight.seq, mu[i,], pch=16, col=col.alpha(rangi2,0.1))
+
+
+#now we'll use apply to get means and PI's for each weight value we used just now
+
+mu.mean <- apply(mu, 2, mean)
+mu.PI <- apply(mu, 2, PI, prob=0.89)
+
+mu.mean
+mu.PI
+
+#now let's plot our actual data alongside our predicted invertvals
+
+plot(height ~ weight, data = d2, col=col.alpha(rangi2, 0.5))
+
+#plot the line using weight.seq as our x values and mu.mean as our y
+lines(weight.seq, mu.mean)
+
+#plot intervals as shaded bands around the lines using mu.PI and weight.seq
+shade(mu.PI, weight.seq)
+
+```
+
+
+McElreath notes that when using the quap estimates, there are analytic solutions for intervals here. But they require an understanding of integrals (I'm guessing just integrating over uncertainty in $\alpha$ and $\beta$? Who knows) and so non stats folks often don't do well with them. That being said, he also notes that once you jump in to MCMC based modelling, which is most real modelling, those integrals are not available and so working with samples from the posterior is the only option. So may as well get used to it now. Good to know analytic approaches exist, but sampling is easier for people used to working with raw data and more versatile as you get into more advanced modelling.
+
+Anyways, here's his overall recipe for intervals for uncertainty:
+
+1) Use link to generate posterior distributions of $\mu$ across values for x. Keep in mind that link uses the original data by default, so if you want a custom range you gots to build it.
+
+2) Use summary functions to to get, well, summaries, of those posterior distributions. Mean and PI are the examples he gives but presumably you could use others? Maybe mode? Go with your gut!
+
+3) Plot the predictions using line or shade or other things to add them to your data. Get an idea of how uncertainty is spread across the range of predictor values - keeping in mind that your uncertainty here is accounting for both correlation among parameter estimates and uncertainty in those estimates.
+
+
 
 ---
 
@@ -806,10 +877,42 @@ Basically, keep in mind that our CI's are only as good as the model. Even a shit
 
 ---
 
+
+
+##### Overthinking: How link works
+
+Basically, link isn't all that sophisticated, its just a wrapper for some simple calculations. More of a convenience function than something truly complicated.
+
+```{r How link works}
+#get samples for coefficients
+post <- extract.samples(m4.3)
+#create a function to calculate a predicted mean weight
+mu.link <- function(weight) post$a + post$b*(weight- x_bar)
+#create a sequence of weights
+weight.seq <- seq(from=25, to = 70, by = 1)
+#apply mu function to weight
+mu <- sapply(weight.seq, mu.link)
+
+#ABOVE IS ALL LINK DOES. The rest of this is what we do with link's output. So yeah, not wildly complicated but a hell of a lot better than having to homebrew a mu.link function for every model we fit I'd say. But what do I know eh? 
+
+#get the mean
+mu.mean <- apply(mu, 2, mean)
+# get the CIs
+mu.CI <- apply(mu, 2, PI, prob =0.89)
+
+```
+
+
+---
+
+###### 4.4.3.5 Prediction Intervals
+
+
+Now we'll generate intervals, not just for our predicted mean, but for the data itself. See below for an old note I wrote on this topic that probably is still useful. I dunno. maybe not. regardless I'm not deleting it.
+
 Important concept here: when we move beyond just looking at uncertainty in the mean and start looking at overall uncertainty, we have to take into account that gaussian $\sigma$. Up till now, all of our posterior estimates have centered around the uncertainty in $\mu$ but not in the overall distribution of heights. So we've been looking at how does our estimate of the average vary but not at how the distribution itself is uncertain. So there's a chunk of code in the book that covers this.
 
 
-I in fact did not add this chunk of code so uhhh
 
 ```{r}
 
