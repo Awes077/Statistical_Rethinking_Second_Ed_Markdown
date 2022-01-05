@@ -813,15 +813,15 @@ $$
 \mu_{i} = \alpha + \beta(x_{i} - \overline{x})
 $$
 
-We can evaluate the distrubtion of predicted means a couple of different ways, first as a distribution and second as intervals:
-```{r}
+We can evaluate the distribution of predicted means a couple of different ways, first as a distribution and second as intervals:
+```{r Evaluating distribution of predicted means}
 dens(mu_at_50, col=rangi2, lwd=2., xlab="mu|weight=50")
 PI(mu_at_50, prob = 0.89)
 ```
 
 Now we want to do the same thing but for every unique value in our original data, here using McElreath's very convenient link function. Link basically does what we just did but for each value used in the original model or with whatever data we provide it. in our case, we are going to provide it with a sequence of x values that span the range of weights seen in our data:
 
-```{r}
+```{r Plotting prediction intervals alongside data}
 weight.seq <- seq(from=25, to=70, by =1)
 
 mu <- link(m4.3, data=data.frame(weight=weight.seq))
@@ -912,19 +912,74 @@ Now we'll generate intervals, not just for our predicted mean, but for the data 
 
 Important concept here: when we move beyond just looking at uncertainty in the mean and start looking at overall uncertainty, we have to take into account that gaussian $\sigma$. Up till now, all of our posterior estimates have centered around the uncertainty in $\mu$ but not in the overall distribution of heights. So we've been looking at how does our estimate of the average vary but not at how the distribution itself is uncertain. So there's a chunk of code in the book that covers this.
 
+So basically, now we are looking, not at the uncertainty in $\mu_{i}$, but in $h_{i}$, our predicted height. So this is draws from the posterior for:
 
+$$
+h_{i} \sim Normal (\mu_{i}, \sigma) 
+$$
 
-```{r}
+So now we have to predict marginal to uncertainty in $\alpha$ and $\Beta$ as they impact $\mu_{i}$, along with uncertainty in our estimate of $\sigma$. Lots of uncertainty here, and we're still just thinking about a single predictor of a simple linear model - no GLMs or group variables. WILD!
 
+We'll be using the sim function, I'm guessing once again from McElreath's rethinking package.
+
+```{r Simulating prediction intervals for heights}
+library(rethinking)
+sim.height <- sim(m4.3, data=list(weight=weight.seq), n=1e4)
+str(sim.height)
+
+#now we'll summarize our heights with PIs
+
+height.PI <- apply(sim.height, 2, PI, prob=0.89)
+
+#now let's plot all three of our predictions, means, intervals around means, and intervals around data:
+
+plot(height~weight, d2, col=col.alpha(rangi2,0.5))
+lines(weight.seq, mu.mean)
+shade(mu.PI, weight.seq)
+shade(height.PI, weight.seq)
+
+```
+
+Absolutely stunning, we love to see it. Look how few data points fall outside our 89% prediction intervals. A true thing of statistical beauty. Awestruck. Anyways.
+
+Quick note that the sim function above takes an n argument. McElreath points out that the higher the n argument for your simulated heights, the smoother the intervals are at their edges. I bumped it up to 10,000 samples above, just because I could, and it really did smooth them out a fair amount.
+
+---
+
+###### Rethinking: Two kinds of Uncertainty
+
+I've talked a bit above about the various sources of uncertainty in the predictions we just plotted. But it's worth noting, as McElreath does, that predicting heights, our actual data, incorporates a separate type of uncertainty or error. That's modelling the process associated with sampling variance in a Gaussian process - what generates the symmetrical spread of data around the mean. That's another modelling assumption inherent to choosing a Gaussian response, but it represents a different type of uncertainty which may be epistemological (more of a convenience for getting predictions) or ontological (a prediction about future data). In a sense, this could have either  "small world" or "large world" implications depending on your modelling approach and rationale.
+
+---
+
+Very quickly, to be consistent, I'll walk through what sim does like I did for link. Also in the book, but nice to have it here in a markdown document I guess.
+
+```{r }
+
+weight.seq <- 25:70
+
+#These lines here are actually what sim does. Extract samples from the posterior then feed those values into rnorm using our linear model for the mean and the posterior samples of sigma for the standard deviation. Yet again, quite simple, but would be very annoying to write it over and over again for every new model. So sim acts as a convenience function to pull the model formula out of the model object (I'm guessing), then feed the data and samples into rnorm in the correct format. Nifty.
+post <- extract.samples(m4.3)
+sim.height <- sapply(weight.seq, function(weight){
+  rnorm(
+    n=nrow(post),
+    mean=post$a+post$b*(weight-x_bar),
+    sd=post$sigma
+  )
+})
+
+height.PI <- apply(sim.height, 2, PI, prob=0.89)
 ```
 
 
 
 
 
-### 4.5 Polynomial Regression
+### 4.5 Curves from Lines
 
-Now we look at a curved line
+Finally! A new section. God these sections got long in the second edition. I mean good for Richard, like great content very thorough, but damn I got so many headers in this markdown now.
+
+Looks like this section is going to cover both polynomial regression and B-splines. I'm familiar with polynomials but I've never really gotten splines so pretty pumped to have a nice explanation. As McElreath puts it, both just act as transformations of your predictors into synthetic variables with a better (nonlinear) relationship to your response variable. Apparently splines are better but who knows??
 
 
 ```{r}
@@ -937,7 +992,6 @@ plot(d$height~d$weight)
 d$weight.s <- ( d$weight - mean(d$weight) )/sd(d$weight)
 ```
 
-Now we can see that, when including non-adult individuals, we have a non-linear relationship. Not sure how I feel about him calling it a bivariat regression. Once again, only one probability distribution used here for our response variable, so still a univariate by my thinking.
 
 As ever, polynomial regression is dicey. They are very difficult to interpret, and there's the whole issue of highly correlated predictors. But here we go anyways!
 
