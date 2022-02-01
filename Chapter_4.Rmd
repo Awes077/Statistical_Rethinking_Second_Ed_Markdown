@@ -1000,3 +1000,65 @@ $\mu_{i} = \alpha + \beta_{1} x_{i} + \beta_{2} x_{i}^2$
 This is a parabolic function, a second order function of x. Here $\beta_{2}$ measures the strength of that curve.
 
 We start by standardizing our variable. This helps control for scale and get an idea of the relative importance of each predictor. Downside is of course interpretation or prediction on the natural scale of the predictor.
+
+
+
+
+
+
+Just gonna jump straight into splines tbh.
+
+```{r}
+#First let's construct our basis functions. This will be a cubic basis function with 15 knots, using the cherry blossom bloom data included in rethinking.
+
+library(rethinking)
+
+data(cherry_blossoms)
+d <- cherry_blossoms
+
+precis(d)
+
+#now just complete cases, then create quantiles that will define where each knot begins. 
+
+d2 <- d[complete.cases(d$doy),]
+num_knots <- 15
+knot_list <- quantile(d2$year, probs=seq(0,1,length.out=num_knots))
+
+
+#now we construct the basis functions using the splines package
+library(splines)
+B <- bs(d2$year,
+        knots=knot_list[-c(1,num_knots)],
+        degree=3, intercept=T)
+
+B
+
+#now let's plot them, although they aren't always the most intuitive to read tbh
+
+plot(NULL, xlim=range(d2$year), ylim=c(0,1), xlab="year", ylab="basis")
+for(i in 1:ncol(B))lines(d2$year, B[,i])
+
+
+#Alright so basically, each row in B is a year and each column the value that year takes for a given basis function. We have 17 columns, so our fifteen knots plus the beginning
+#and ending range right? Like if we have 15 knots, we have 17 ranges where importance of each basis changes. So at the start, the only non-zero values are for the first 1:4 
+#basis functions. So over the first range of years, like the first 200 or so years, we are only looking at our first four or so basis functions. As we progress through that
+#we start to include the other basis functions - their values increasing as the values in columns 1:3 decrease. So when we start adding weights, we're weighting each
+#combination of basis functions different. Gonna need a lot of time to grok this nonsense but it intuitively feels very powerful? If not just because it feels very similar
+#to lots of other nonlinear methods like GAMs and Fourier transforms. Basically we have some highly nonlinear relationship between y~x, and we model it as the sum of non-linear 
+#relationships. Because of how many basis functions we have, each of which are technically identical, when we sum them and weight each sum differently, we end up with an #increasingly non-linear relationship between y and x. Really need to think hard about how our prediction changes as a function of both basis degree and weights. But overall
+#seems like a very powerful and seemingly widely used process.
+
+#Alright so the basis functions themselves range from 0 to 1. So each basis result in B can give me only some value between 0 and 1. We then sum these for each of our potential
+#years. So that each predicted value, before our weight, I would think has some fixed value? Looks like they all sum to 1? Makes some amount of sense...And this is standardized/
+#scaled deviance from mean year. So that has some innate interpretation I would think - not sure what though.
+d2$year
+sum(B[1,])
+B[1,]
+B[2,]
+sum(B[2,])
+
+
+
+```
+
+
