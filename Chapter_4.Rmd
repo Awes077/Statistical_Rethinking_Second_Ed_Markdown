@@ -21,7 +21,7 @@ The core logic has to do with random draws from any distribution. Every draw rep
 To carry this further, there are many many ways to cancel out positive or negative deviations. But there are very few ways (ie permutations of our events) that yield large negative or positive sums. Thus we see our inevitable Gaussian. So that brings us back to the max entropy perspective. Our central values make the fewest assumptions about our underlying events that constitute the sums. Large values can only be made by many steps in one direction or a few large steps with few small steps in the opposite. So you can think of it like, there is an equal probability of any given permutation. But permutations can have the same sum. And as we move closer to the center, we have more and more permutations that have the same sum - thus, given they are all equally probable, we would expect certain sums to appear much more frequently. So the normal distribution emerges. Heck yeah.
 
 ```{r Normal by addition}
-#setion 4.1.1 - Normal by addition
+#section 4.1.1 - Normal by addition
 
 #simulating the coin toss and step example for explaining the normal distribution.
 
@@ -1048,17 +1048,101 @@ for(i in 1:ncol(B))lines(d2$year, B[,i])
 #relationships. Because of how many basis functions we have, each of which are technically identical, when we sum them and weight each sum differently, we end up with an #increasingly non-linear relationship between y and x. Really need to think hard about how our prediction changes as a function of both basis degree and weights. But overall
 #seems like a very powerful and seemingly widely used process.
 
-#Alright so the basis functions themselves range from 0 to 1. So each basis result in B can give me only some value between 0 and 1. We then sum these for each of our potential
-#years. So that each predicted value, before our weight, I would think has some fixed value? Looks like they all sum to 1? Makes some amount of sense...And this is standardized/
-#scaled deviance from mean year. So that has some innate interpretation I would think - not sure what though.
+#Gonna take another swing at this before I actually do the spline model. So each column in B is a basis function. Each row is a year. Each ROW sums to 1, not column. Columns sum to a different value. Is it always the same? Nope. So each basis function is some sum of years? The overall impact of EVERY year across basis functions is 1. So we are taking
+#our large number of years and creating 17 new variables. We then sum these variables to get a new predictor. Each basis should be the same structurally but seems to represent
+#a different relationship among specific years. We then weight each of these composite sums using the beta coefficients in a model. So like...if I start with a data point that
+#has a year of 1200, what does its spline predictor become? I want to predict number of days into the year that we blossom I think. Might have had too much coffee to unravel this today. Just gonna jump to the model now.
 d2$year
 sum(B[1,])
 B[1,]
-B[2,]
-sum(B[2,])
+B[,2]
+sum(B[,17])
 
+length(na.omit(cherry_blossoms$doy))
+```
+
+
+```{r}
+
+m4.7 <- quap(
+  alist(
+    D~dnorm(mu,sigma),
+    mu <- a + B %*% w,
+    a ~ dnorm(100,10),
+    w ~ dnorm(0,10),
+    sigma ~ dexp(1)
+  ), data=list(D=d2$doy, B=B),
+  start=list(w=rep(0,ncol(B)))
+)
+
+post <- extract.samples(m4.7)
+
+#alright this plot gives us the basis times the weights, so our predicted value minus the intercept. Right? Yeah. Sensible.
+
+w <- apply(post$w, 2, mean)
+plot(NULL, xlim=range(d2$year), ylim=c(-6,6),
+     xlab="year", ylab="basis*weight")
+for(i in 1:ncol(B)) {lines(d2$year, w[i]*B[,i])}
+
+#now we plot the actual predictions against obseved data I believe.
+
+mu <- link(m4.7)
+mu_PI <- apply(mu, 2, PI, 0.97)
+plot(d2$year, d2$doy, col=col.alpha(rangi2,0.3), pch=16)
+shade(mu_PI, d2$year, col=col.alpha("black", 0.5))
+
+#once again, understanding this is gonna require some actual heavy thinking on my part but I'll get around to it eventually.
 
 
 ```
+
+
+
+
+Now the final questions:
+
+4E1) Likelihood is $y_{i} \sim Normal(\mu, \sigma)$
+4E2) 2 parameters, $\mu$ and $\sigma$
+4E3) $P(\mu,\sigma | y) = \frac{P(y_{i} | \mu, \sigma) P(\mu)P(\sigma)}{P(y)}$ Dunno if that's 100% correct but it's what I'm runnin with
+4E4) line 2, $\mu_{i} = \alpha +\beta x_{i}$
+4E5) 3, $\alpha$, $\beta$, and $\sigma$
+
+4M1) Gonna sim from our priors ugh
+
+4M2) now convert to a quap
+
+```{r}
+
+#4M1
+mu_samp <- rnorm(1e4, 0, 10)
+sig_samp <- rexp(1e4, 1)
+
+y_samp <- rnorm(mu_samp, sig_samp)
+
+dens(y_samp)
+
+#4M2
+
+m_4m2 <- quap(
+  alist(
+    y ~ dnorm(mu, sigma),
+    mu ~dnorm(0,10)
+    sigma ~ rexp(1)
+  )
+)
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
 
 
